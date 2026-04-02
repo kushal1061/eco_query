@@ -1,0 +1,29 @@
+{
+  "name": "llm-extension",
+  "version": "1.0.0",
+  "description": "",
+  "main": "popup.js",
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --outfile=dist/content.bundle.js",
+    "watch": "esbuild src/index.js --bundle --outfile=dist/content.bundle.js --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kushal1061/llm_extension.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/kushal1061/llm_extension/issues"
+  },
+  "homepage": "https://github.com/kushal1061/llm_extension#readme",
+  "devDependencies": {
+    "esbuild": "^0.27.5"
+  },
+  "dependencies": {
+    "streaming-markdown": "^0.2.15"
+  }
+}
