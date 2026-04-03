@@ -169,14 +169,27 @@ function normalizeClassifierResult(parsed) {
 
     return (hasRecencyTerm && hasNewsTerm) || hasRealtimeTopic;
 }
-async function llmCategoryRoute(query) {
+async function llmCategoryRoute(query, model) {
+    if (!model) {
+        return {
+            decision: "chatgpt",
+            route: "cloud",
+            confidence: "low",
+            override: "local_model_unavailable",
+            total: null,
+            reason: "No local model is available for routing, defaulting to cloud.",
+            scores: null,
+            layer: 2,
+        };
+    }
+
     const classifierPrompt = buildClassifierPrompt(query); 
     try {
         const response = await fetch("http://localhost:11434/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                model: "ministral-3:8b",
+                model,
                 prompt: classifierPrompt,
                 stream: false,
             }),
@@ -210,8 +223,8 @@ async function llmCategoryRoute(query) {
         };
     }
 }
-export  async function semanticRoute(query) {
-    const llmRoute = await llmCategoryRoute(query);
+export async function semanticRoute(query, model) {
+    const llmRoute = await llmCategoryRoute(query, model);
 
     if (
         llmRoute.override === "real_time_data" ||

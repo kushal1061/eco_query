@@ -1,21 +1,7 @@
-export function addMessage(role, content) {
-  let history = JSON.parse(localStorage.getItem("chat_history")) || [];
+import { getChatHistory } from "./chatdb.js";
 
-  history.push({
-    role, // "user" or "assistant"
-    content,
-    time: Date.now()
-  });
-
-  if (history.length > 20) {
-    history = history.slice(-20);
-  }
-
-  localStorage.setItem("chat_history", JSON.stringify(history));
-}
-
-export function getRecentContext() {
-  let history = JSON.parse(localStorage.getItem("chat_history")) || [];
+export function getRecentContext(chatId) {
+  let history = getChatHistory(chatId);
 
   let users = [];
   let assistants = [];
@@ -27,7 +13,7 @@ export function getRecentContext() {
       users.push(msg.content);
     }
 
-    if (msg.role === "ollama" && assistants.length < 3) {
+    if ((msg.role === "ollama" || msg.role === "assistant") && assistants.length < 3) {
       assistants.push(msg.content);
     }
 
@@ -70,8 +56,13 @@ Final Context Summary:
 `;
 }
 
-export async function generateSummary() {
-  const { users, assistants } = getRecentContext();
+export async function generateSummary(model, chatId = "default") {
+  if (!model) {
+    console.warn("Skipping summary generation because no local model is selected.");
+    return "";
+  }
+
+  const { users, assistants } = getRecentContext(chatId);
   const prompt = buildContextPrompt(users, assistants);
 
   const res = await fetch("http://localhost:11434/api/generate", {
@@ -80,7 +71,7 @@ export async function generateSummary() {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "ministral-3:8b",
+      model,
       prompt: prompt,
       stream: false
     })

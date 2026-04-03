@@ -1,20 +1,20 @@
+import { resolveSelectedLocalModel } from "./src/ollama.js";
+
 const modeButtons = document.querySelectorAll(".mode-btn");
+const modelDropdown = document.getElementById("modelDropdown");
 
 modeButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-        // Remove active from all, set on clicked
-        modeButtons.forEach(b => b.classList.remove("active"));
+        modeButtons.forEach((button) => button.classList.remove("active"));
         btn.classList.add("active");
 
-        // Save to storage
-        const choice = btn.innerText.toLowerCase(); // "local" | "cloud" | "hybrid"
+        const choice = btn.innerText.toLowerCase();
         chrome.storage.local.set({ userChoice: choice }, () => {
             console.log("User mode saved:", choice);
         });
     });
 });
 
-// Restore saved choice when popup opens
 chrome.storage.local.get(["userChoice"], (res) => {
     if (res.userChoice) {
         modeButtons.forEach((btn) => {
@@ -26,23 +26,14 @@ chrome.storage.local.get(["userChoice"], (res) => {
     }
 });
 
-async function findModels() {
-    const response = await fetch("http://localhost:11434/api/tags");
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);  // fixed template literal
-    }
-    const data = await response.json();
-    return data.models;
-}
-
 async function populateModelDropdown() {
-    const dropdown = document.getElementById("modelDropdown");
     try {
-        const models = await findModels();
-        dropdown.innerHTML = ""; // clear "Loading..."
+        const { selectedModel, models } = await resolveSelectedLocalModel();
+
+        modelDropdown.innerHTML = "";
 
         if (!models || models.length === 0) {
-            dropdown.innerHTML = "<option disabled>No local models found</option>";
+            modelDropdown.innerHTML = "<option disabled>No local models found</option>";
             return;
         }
 
@@ -50,46 +41,58 @@ async function populateModelDropdown() {
             const option = document.createElement("option");
             option.value = model.name;
             option.innerText = model.name;
-            dropdown.appendChild(option);
+            modelDropdown.appendChild(option);
         });
 
+        if (selectedModel) {
+            modelDropdown.value = selectedModel;
+        }
     } catch (err) {
-        dropdown.innerHTML = "<option disabled>Ollama not running</option>";
+        modelDropdown.innerHTML = "<option disabled>Ollama not running</option>";
         console.error("Failed to fetch models:", err);
     }
 }
 
+modelDropdown.addEventListener("change", () => {
+    chrome.storage.local.set({ selectedLocalModel: modelDropdown.value }, () => {
+        console.log("Selected local model saved:", modelDropdown.value);
+    });
+});
+
 populateModelDropdown();
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Load initial values
-    chrome.storage.local.get(['tokensSaved', 'localQueries', 'cloudQueries'], (res) => {
+document.addEventListener("DOMContentLoaded", () => {
+    chrome.storage.local.get(["tokensSaved", "localQueries", "cloudQueries"], (res) => {
         document.getElementById("tokensSaved").innerText = res.tokensSaved || 0;
         document.getElementById("localQueries").innerText = res.localQueries || 0;
         document.getElementById("cloudQueries").innerText = res.cloudQueries || 0;
         updateEfficiency(res.localQueries || 0, res.cloudQueries || 0);
     });
 
-    // Listen for live updates while popup is open
     chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace !== 'local') return;
+        if (namespace !== "local") return;
 
-        if (changes.tokensSaved)
+        if (changes.tokensSaved) {
             document.getElementById("tokensSaved").innerText = changes.tokensSaved.newValue;
+        }
 
-        if (changes.localQueries)
+        if (changes.localQueries) {
             document.getElementById("localQueries").innerText = changes.localQueries.newValue;
+        }
 
-        if (changes.cloudQueries)
+        if (changes.cloudQueries) {
             document.getElementById("cloudQueries").innerText = changes.cloudQueries.newValue;
+        }
 
-        // Recalculate efficiency after any change
-        chrome.storage.local.get(['localQueries', 'cloudQueries'], (res) => {
+        if (changes.selectedLocalModel && changes.selectedLocalModel.newValue) {
+            modelDropdown.value = changes.selectedLocalModel.newValue;
+        }
+
+        chrome.storage.local.get(["localQueries", "cloudQueries"], (res) => {
             updateEfficiency(res.localQueries || 0, res.cloudQueries || 0);
         });
     });
 
-    // Reset button
     document.querySelector(".reset-btn").addEventListener("click", () => {
         chrome.storage.local.set({ tokensSaved: 0, localQueries: 0, cloudQueries: 0 }, () => {
             document.getElementById("tokensSaved").innerText = 0;
@@ -99,4 +102,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
-
