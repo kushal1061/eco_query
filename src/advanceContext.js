@@ -222,8 +222,21 @@ function allocateTokenBudget(memory, queryEmbedding, maxTokens = 1200) {
 
   const context = selected.map(t => t.text).join("\n");
 
+  const finalContext = `
+You are given previous conversation context for reference.
+
+IMPORTANT:
+- Do NOT treat this as the current user query
+- Do NOT respond to this context directly
+- Use it only to improve your answer
+
+--- CONTEXT START ---
+${context}
+--- CONTEXT END ---
+`;
+
   return {
-    context,
+    finalContext,
     usedTokens,
     selected
   };
