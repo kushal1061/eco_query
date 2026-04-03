@@ -1,6 +1,10 @@
 import { semanticRoute } from "./routing.js";
 import { generateSummary } from "./context.js";
-import { streamOllamaResponse, getLocalStreamingResponse } from "./ollama.js";
+import {
+    streamOllamaResponse,
+    getLocalStreamingResponse,
+    resolveSelectedLocalModel,
+} from "./ollama.js";
 import { passThroughToChatGPT } from "./chatgpt.js";
 import {
     renderLocalUserPrompt,
@@ -12,6 +16,14 @@ console.log("Extension loaded");
 
 let lastText = "";
 let isProcessing = false;
+let userMode = "hybrid";
+let lastresponse = true;
+let currentLocalModel = null;
+let localModelInitPromise = null;
+
+function getCurrentChatId() {
+    return window.location.pathname.split("/").filter(Boolean).pop() || "default";
+}
 
 document.addEventListener("input", () => {
     const inputBox = document.querySelector("#prompt-textarea");
@@ -36,10 +48,61 @@ function sendToPopup(type, value) {
     }
 }
 
-let userMode = "hybrid"; // default mode
-let lastresponse = true; // tracks if last response was cloud (true) or local/fresh (false)
+async function initializeLocalModelSelection() {
+    if (!localModelInitPromise) {
+        localModelInitPromise = resolveSelectedLocalModel()
+            .then(({ selectedModel }) => {
+                currentLocalModel = selectedModel || null;
+                console.log("Resolved local model:", currentLocalModel || "none");
+                return currentLocalModel;
+            })
+            .catch((err) => {
+                currentLocalModel = null;
+                console.error("Failed to resolve local model:", err);
+                return null;
+            })
+            .finally(() => {
+                localModelInitPromise = null;
+            });
+    }
 
-// Keep userMode in sync with storage changes (e.g. popup toggle)
+    return localModelInitPromise;
+}
+
+async function getResolvedLocalModel() {
+    if (currentLocalModel) {
+        return currentLocalModel;
+    }
+
+    return initializeLocalModelSelection();
+}
+
+function showLocalModelUnavailable(label = "No local model available") {
+    const pendingUi = createPendingResponseBubble(label);
+    pendingUi.bubble.innerText = "No local model is available. Start Ollama and select a model in the extension popup.";
+    return pendingUi;
+}
+
+async function passQueryToCloud(editor, userQuery, localModel = currentLocalModel, chatId = "default") {
+    sendToPopup("CLOUD_QUERY_UPDATE", 1);
+
+    if (lastresponse === false) {
+        const summary = await generateSummary(localModel, chatId);
+
+        if (summary) {
+            passThroughToChatGPT(editor, `summary:${summary},original_query:${userQuery}`);
+        } else {
+            passThroughToChatGPT(editor, userQuery);
+        }
+    } else {
+        passThroughToChatGPT(editor, userQuery);
+    }
+
+    lastresponse = true;
+}
+
+initializeLocalModelSelection();
+
 chrome.storage.local.get(["userChoice"], (res) => {
     userMode = res.userChoice || "hybrid";
     console.log("Initial userMode:", userMode);
@@ -49,6 +112,11 @@ chrome.storage.onChanged.addListener((changes) => {
     if (changes.userChoice) {
         userMode = changes.userChoice.newValue || "hybrid";
         console.log("userMode updated:", userMode);
+    }
+
+    if (changes.selectedLocalModel) {
+        currentLocalModel = changes.selectedLocalModel.newValue || null;
+        console.log("selectedLocalModel updated:", currentLocalModel || "none");
     }
 });
 
@@ -80,7 +148,18 @@ document.addEventListener("keydown", async (e) => {
     console.log("Intercepted query in mode:", userMode);
 
     try {
+        const selectedModel = await getResolvedLocalModel();
+        const currentChatId = getCurrentChatId();
+        console.log("Current chat ID:", currentChatId);
+
         if (userMode === "local") {
+            renderLocalUserPrompt(userQuery);
+
+            if (!selectedModel) {
+                showLocalModelUnavailable("Local model unavailable");
+                return;
+            }
+
             const localRouteInfo = {
                 decision: "local",
                 confidence: "high",
@@ -90,61 +169,39 @@ document.addEventListener("keydown", async (e) => {
             const userToken = Math.ceil(userQuery.length / 4);
             sendToPopup("TOKEN_UPDATE", userToken);
             sendToPopup("LOCAL_QUERY_UPDATE", 1);
-            renderLocalUserPrompt(userQuery);
-            const pendingUi = createPendingResponseBubble("Local model selected");
-            const streamResponse = await getLocalStreamingResponse(userQuery, "ministral-3:8b");
-            await injectStreamingResponse(streamOllamaResponse(streamResponse), localRouteInfo, pendingUi);
+            const pendingUi = createPendingResponseBubble(`Local model selected: ${selectedModel}`);
+            const streamResponse = await getLocalStreamingResponse(userQuery, selectedModel, currentChatId);
+            await injectStreamingResponse(streamOllamaResponse(streamResponse, currentChatId), localRouteInfo, pendingUi);
             lastresponse = false;
 
         } else if (userMode === "cloud") {
-            sendToPopup("CLOUD_QUERY_UPDATE", 1);
-            if (lastresponse === false) {
-                const summary = await generateSummary();
-                passThroughToChatGPT(editor, `summary:${summary},original_query:${userQuery}`);
-            } else {
-                passThroughToChatGPT(editor, userQuery);
-            }
-            lastresponse = true;
+            await passQueryToCloud(editor, userQuery, selectedModel, currentChatId);
         } else {
             const userPromptSection = renderLocalUserPrompt(userQuery);
             const pendingUi = createPendingResponseBubble("Routing...");
             try {
-                const routeInfo = await semanticRoute(userQuery);
+                const routeInfo = await semanticRoute(userQuery, selectedModel);
                 console.log("Final route:", routeInfo);
 
-                if (routeInfo.decision === "local") {
+                if (routeInfo.decision === "local" && selectedModel) {
                     const userToken = Math.ceil(userQuery.length / 4);
                     sendToPopup("TOKEN_UPDATE", userToken);
                     sendToPopup("LOCAL_QUERY_UPDATE", 1);
-                    const streamResponse = await getLocalStreamingResponse(userQuery, "ministral-3:8b");
-                    await injectStreamingResponse(streamOllamaResponse(streamResponse), routeInfo, pendingUi);
-                    lastresponse = false; 
+                    const streamResponse = await getLocalStreamingResponse(userQuery, selectedModel, currentChatId);
+                    await injectStreamingResponse(streamOllamaResponse(streamResponse, currentChatId), routeInfo, pendingUi);
+                    lastresponse = false;
 
                 } else {
                     userPromptSection.remove();
                     pendingUi.section.remove();
-                    sendToPopup("CLOUD_QUERY_UPDATE", 1);
-                    if (lastresponse === false) {
-                        const summary = await generateSummary();
-                        passThroughToChatGPT(editor, `summary:${summary},original_query:${userQuery}`);
-                    } else {
-                        passThroughToChatGPT(editor, userQuery);
-                    }
-                    lastresponse = true;
+                    await passQueryToCloud(editor, userQuery, selectedModel, currentChatId);
                 }
             } catch (err) {
                 console.error("Routing error, falling back to cloud:", err);
                 userPromptSection.remove();
                 pendingUi.section.remove();
-                sendToPopup("CLOUD_QUERY_UPDATE", 1);
-                if (lastresponse === false) {
-                    const summary = await generateSummary();
-                    passThroughToChatGPT(editor, `summary:${summary},original_query:${userQuery}`);
-                } else {
-                    passThroughToChatGPT(editor, userQuery);
+                await passQueryToCloud(editor, userQuery, selectedModel, currentChatId);
                 }
-                lastresponse = true;
-            }
         }
     } catch (err) {
         console.error("Fatal error in keydown handler:", err);
