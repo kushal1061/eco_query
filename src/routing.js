@@ -13,6 +13,7 @@ Analyze the prompt carefully across all factors below. Be conservative — only 
 
 ---
 IMP: If you encounter any word like production grade , always route to CLOUD, as local models are not yet reliable for critical use cases.
+IMP: Requests to build or implement multi-feature apps or systems such as "create a realtime chat app", "build a full stack app", or "implement WebSocket chat with typing indicators and read receipts" should route to CLOUD.
 
 ## CONVERSATION HISTORY (up to last 3 turns / 6 messages)
 ${historyText}
@@ -157,7 +158,24 @@ function normalizeClassifierResult(parsed) {
         layer: 2,
     };
 }
- function isRealtimeOrNewsQuery(query) {
+
+function normalizeQuery(query) {
+    return ` ${String(query || "").toLowerCase().replace(/\s+/g, " ").trim()} `;
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasTerm(query, term) {
+    const pattern = new RegExp(`(^|\\W)${escapeRegExp(term.trim())}(?=$|\\W)`);
+    return pattern.test(query);
+}
+
+function countMatches(query, terms) {
+    return terms.reduce((count, term) => count + (hasTerm(query, term) ? 1 : 0), 0);
+}
+function isRealtimeOrNewsQuery(query) {
     const normalizedQuery = String(query || "").toLowerCase();
     const recencyTerms = ["latest", "current", "today", "recent", "breaking", "live", "right now"];
     const newsTerms = ["news", "headline", "headlines", "update", "updates"];
