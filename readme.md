@@ -6,9 +6,9 @@ This project will help you combine the powers of a local LLM with a cloud LLM to
 *(Skip this step if you are already running a local LLM on Ollama)*
 1. Download and install **Ollama** from [ollama.com](https://ollama.com/).
 2. Open your terminal or command prompt.
-3. Run the following command to download and start a local model (e.g., `llama3` or `phi3`):
+3. Run the following command to download and start a local model (e.g., `mistral`):
    ```bash
-   ollama run llama3
+   ollama run <model_name>
    ```
 4. Ensure the Ollama background service is running on your system.
 
@@ -17,16 +17,25 @@ This project will help you combine the powers of a local LLM with a cloud LLM to
 2. Enable **Developer mode** by toggling the switch in the top right corner.
 3. Click on the **Load unpacked** button.
 4. Select the root folder of this project (the directory containing the extension's `manifest.json` file).
+
 ![modeAndLoad image](assets/developerAndLoad.png)
 
 ## Step 3 - Usage (ChatGPT)
 1. Go to [ChatGPT](https://chatgpt.com).
 2. Write your query in the chat box, and the extension will automatically run and process it using the hybrid approach.
 
-## Step 4 - Mode Selection
-There is a mode selection feature available in the extension's popup interface.
+![chatGPTImage image](assets/chatgptchatImage.jpeg)
+
+## Step 4 - Mode and Model Selection
+There is a mode and model selection features available in the extension's popup interface.
 1. Click on the Eco Query extension icon in your browser's extension toolbar.
-2. You can switch between different modes to control how your queries are handled between local, cloud and Hybrid.
+2. You can switch between different modes as well as models to control how your queries are handled between local, cloud and Hybrid.
+
+![modeSelection image](assets/modeSelection.jpeg)
+
+![modelSelection image](assets/modelSelection.jpeg)
+
+*(Note: These are the models you have downloaded and can run.)*
 
 ---
 
