@@ -14,6 +14,8 @@ This project will help you combine the powers of a local LLM with a cloud LLM to
 4. Ensure the Ollama background service is running on your system.
 
 ## Step 2 - Setting up the Extension
+**Note:** Ensure that [Node.js](https://nodejs.org/) is installed on your laptop before proceeding, as it is required to install dependencies and build the extension.
+
 1. Clone the repository.
 2. Open your terminal in the project directory and run `npm install` to install dependencies.
 3. Build the extension by running `npm run build` (or use `npm run watch` if you plan to make changes).
