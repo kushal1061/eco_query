@@ -1,5 +1,5 @@
 import { addMessage, buildOllamaMessages, getChatHistory } from './chatdb.js';
-
+import { getQueryEmbedding } from './context.js';
 const OLLAMA_BASE_URL = "http://localhost:11434";
 const SELECTED_LOCAL_MODEL_KEY = "selectedLocalModel";
 
@@ -23,7 +23,7 @@ function requireModel(model) {
     return model;
 }
 
-export async function* streamOllamaResponse(response, chatId) {
+export async function* streamOllamaResponse(response, chatId, query) {
     if (!response.ok) {
         throw new Error(`Ollama HTTP error: ${response.status}`);
     }
@@ -53,7 +53,32 @@ export async function* streamOllamaResponse(response, chatId) {
                 yield chunk;
             }
             if (json.done) {
-                addMessage("ollama", result, chatId);
+                const embedding = await getQueryEmbedding(query);
+
+                addMessage({
+                    role: "user",
+                    content: query,
+                    chatId,
+                    query,
+                    text: query,
+                    resolvedBy: "local",
+                    entities: [],
+                    embedding,
+                    tokens: Math.ceil(query.length / 4),
+                });
+
+                addMessage({
+                    role: "assistant",
+                    content: result,
+                    chatId,
+                    query: "",
+                    text: "",
+                    tokens: 0,
+                    resolvedBy: "local",
+                    entities: [],
+                    embedding: [],
+                });
+
                 console.log("Ollama stream ended");
                 return;
             }
@@ -75,15 +100,13 @@ export async function* streamOllamaResponse(response, chatId) {
 export async function getLocalStreamingResponse(query, model, chatId) {
     const selectedModel = requireModel(model);
     const existingHistory = getChatHistory(chatId);
-    addMessage("user", query, chatId);
-
     if (existingHistory.length > 0) {
         return fetch(`${OLLAMA_BASE_URL}/api/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 model: selectedModel,
-                messages: buildOllamaMessages(chatId),
+                messages: buildOllamaMessages(chatId, query),
                 stream: true,
             }),
         });

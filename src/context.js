@@ -81,3 +81,37 @@ export async function generateSummary(model, chatId = "default") {
   console.log("Summary:", data.response);
   return data.response || "";
 }
+export async function getQueryEmbedding(query) {
+  if (!query?.trim()) {
+    return [];
+  }
+
+  try {
+    const response = await fetch("http://localhost:11434/api/embed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "embeddinggemma",
+        input: query
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Network response was not ok " + response.statusText);
+    }
+
+    const data = await response.json();
+    const embeddings = data.embeddings ?? data.embedding ?? [];
+
+    if (Array.isArray(embeddings[0])) {
+      return embeddings[0];
+    }
+
+    return Array.isArray(embeddings) ? embeddings : [];
+  } catch (error) {
+    console.error("There has been a problem with your fetch operation:", error);
+    return [];
+  }
+}

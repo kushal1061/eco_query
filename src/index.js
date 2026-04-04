@@ -11,7 +11,9 @@ import {
     createPendingResponseBubble,
     injectStreamingResponse
 } from "./ui.js";
-
+import { getChatHistory} from "./chatdb.js";
+import { getQueryEmbedding } from "./context.js";
+import { allocateTokenBudget } from "./advanceContext.js";
 console.log("Extension loaded");
 
 let lastText = "";
@@ -87,10 +89,13 @@ async function passQueryToCloud(editor, userQuery, localModel = currentLocalMode
     sendToPopup("CLOUD_QUERY_UPDATE", 1);
 
     if (lastresponse === false) {
-        const summary = await generateSummary(localModel, chatId);
-
-        if (summary) {
-            passThroughToChatGPT(editor, `summary:${summary},original_query:${userQuery}`);
+        // const summary = await generateSummary(localModel, chatId);
+        const memory = getChatHistory(chatId)
+            .filter(msg => msg.role === "user");
+        const queryEmbedding = await getQueryEmbedding(userQuery);
+        const { finalContext ,usedTokens, selected } = allocateTokenBudget(memory, queryEmbedding);
+        if (finalContext) {
+            passThroughToChatGPT(editor, finalContext + "\n\nUser Query: " + userQuery);
         } else {
             passThroughToChatGPT(editor, userQuery);
         }
@@ -171,7 +176,7 @@ document.addEventListener("keydown", async (e) => {
             sendToPopup("LOCAL_QUERY_UPDATE", 1);
             const pendingUi = createPendingResponseBubble(`Local model selected: ${selectedModel}`);
             const streamResponse = await getLocalStreamingResponse(userQuery, selectedModel, currentChatId);
-            await injectStreamingResponse(streamOllamaResponse(streamResponse, currentChatId), localRouteInfo, pendingUi);
+            await injectStreamingResponse(streamOllamaResponse(streamResponse, currentChatId,userQuery), localRouteInfo, pendingUi);
             lastresponse = false;
 
         } else if (userMode === "cloud") {
@@ -188,7 +193,7 @@ document.addEventListener("keydown", async (e) => {
                     sendToPopup("TOKEN_UPDATE", userToken);
                     sendToPopup("LOCAL_QUERY_UPDATE", 1);
                     const streamResponse = await getLocalStreamingResponse(userQuery, selectedModel, currentChatId);
-                    await injectStreamingResponse(streamOllamaResponse(streamResponse, currentChatId), routeInfo, pendingUi);
+                    await injectStreamingResponse(streamOllamaResponse(streamResponse, currentChatId,userQuery), routeInfo, pendingUi);
                     lastresponse = false;
 
                 } else {
